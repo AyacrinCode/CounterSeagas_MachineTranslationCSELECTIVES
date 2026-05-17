@@ -17,8 +17,9 @@ This notebook implements and benchmarks a full sequence-to-sequence neural machi
 | Source | `rhyliieee/tagalog-filipino-english-translation` (Hugging Face) |
 | Direction | English → Filipino |
 | Split | 80% train / 10% validation / 10% test (auto-split if not pre-split) |
-| Max train samples | 20,000 (experiment override) |
-| Max val samples | 1,500 (experiment override) |
+| Max train samples | 35,000 (experiment override) |
+| Max val samples | 2,500 (experiment override) |
+| Eval pairs used | Up to 200 test pairs |
 
 Text is lowercased, HTML-unescaped, unicode-normalised, and filtered by token length and length ratio before training.
 
@@ -26,7 +27,7 @@ Text is lowercased, HTML-unescaped, unicode-normalised, and filtered by token le
 
 ## Model Architecture
 
-```
+```text
 Encoder  →  AdditiveAttention  →  Decoder  →  Linear projection
 ```
 
@@ -56,7 +57,7 @@ Three independent models are trained, one per dropout value, with all other hype
 
 | Setting | Value |
 |---|---|
-| Epochs | 10 |
+| Epochs | 15 |
 | Batch size | 64 |
 | Optimiser | Adam (lr=5e-4, weight_decay=1e-5) |
 | Gradient clipping | 1.0 |
@@ -77,6 +78,21 @@ Both are computed on up to 200 test pairs using beam search decoding.
 
 ---
 
+## Results (latest run)
+
+| Dropout | Best Val Loss ↓ | SacreBLEU ↑ | METEOR ↑ | Total Time (min) |
+|---:|---:|---:|---:|---:|
+| 0.3 | **4.5099** | 9.5951 | 0.32430 | 52.0 |
+| 0.5 | 4.5976 | **9.7267** | **0.33772** | 52.4 |
+| 0.7 | 4.8004 | 7.1054 | 0.28490 | 51.6 |
+
+Notes:
+- Lowest validation loss occurs at dropout **0.3**.
+- Best SacreBLEU and METEOR occur at dropout **0.5**.
+- Highest dropout (**0.7**) performs worst across metrics, while runtime stays nearly constant.
+
+---
+
 ## Outputs
 
 | File | Contents |
@@ -84,6 +100,10 @@ Both are computed on up to 200 test pairs using beam search decoding.
 | `data/exp4_dropout_summary.csv` | One row per dropout value: BLEU, METEOR, best val loss, timing |
 | `data/exp4_dropout_history.csv` | Per-epoch train/val loss for every run |
 | `/content/exp4_dropout_<value>.pt` | Best model checkpoint for each dropout value |
+
+In this workspace, the latest exported copies are:
+- `exp4_dropout_summary (4).csv`
+- `exp4_dropout_history (1).csv`
 
 The notebook also renders six matplotlib plots inline:
 - Train loss vs. epoch (all dropout values overlaid)
@@ -97,7 +117,7 @@ The notebook also renders six matplotlib plots inline:
 
 ## Requirements
 
-```
+```text
 torch
 datasets
 sacrebleu
@@ -130,7 +150,7 @@ NLTK resources (`wordnet`, `omw-1.4`) are downloaded automatically at runtime if
 
 ## Project Structure
 
-```
+```text
 CounterSeagas-Seq2seqDropoutValue.ipynb
 │
 ├── Configuration
