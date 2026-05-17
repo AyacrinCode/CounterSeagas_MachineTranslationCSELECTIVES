@@ -1,223 +1,144 @@
-# An NLP-Based English-Filipino Machine Translation System
+# CounterSeagas — Seq2Seq Dropout Value Experiment
 
-This project implements a clean and modular data-driven machine translation pipeline for English <-> Filipino using PyTorch Seq2Seq (LSTM Encoder-Decoder), Hugging Face datasets, and SacreBLEU evaluation.
+A focused ablation study that trains an attentional LSTM Seq2Seq model for **English → Filipino machine translation** across three dropout values (0.3, 0.5, 0.7) and evaluates each with **SacreBLEU** and **METEOR**.
 
-## Key Artifacts
+---
 
-- **ACL-style LaTeX report (Overleaf-ready):** `report/english_filipino_translation_report.tex`
-- **Rendered PDF (if present in your checkout):** `report/english_filipino_translation_report.pdf`
-- **Long-form Markdown draft:** `report/RESEARCH_PAPER.md`
-- **Primary experiment notebooks:** `notebooks/` (see `notebooks/Final/` for final versions)
+## Overview
+
+This notebook implements and benchmarks a full sequence-to-sequence neural machine translation pipeline. The central experiment (Experiment 4) sweeps dropout rates to determine their effect on translation quality and generalisation, using a Tagalog/Filipino–English dataset from Hugging Face.
+
+---
+
+## Dataset
+
+| Property | Value |
+|---|---|
+| Source | `rhyliieee/tagalog-filipino-english-translation` (Hugging Face) |
+| Direction | English → Filipino |
+| Split | 80% train / 10% validation / 10% test (auto-split if not pre-split) |
+| Max train samples | 20,000 (experiment override) |
+| Max val samples | 1,500 (experiment override) |
+
+Text is lowercased, HTML-unescaped, unicode-normalised, and filtered by token length and length ratio before training.
+
+---
+
+## Model Architecture
+
+```
+Encoder  →  AdditiveAttention  →  Decoder  →  Linear projection
+```
+
+Both encoder and decoder are multi-layer LSTMs with additive (Bahdanau-style) attention connecting them.
+
+| Hyperparameter | Value |
+|---|---|
+| Embedding dim | 384 |
+| Hidden dim | 768 |
+| Num LSTM layers | 3 (experiment override) |
+| Attention | Additive (Bahdanau) |
+| Decoding | Beam search (width 5, length penalty 0.7) |
+
+---
+
+## Experiment — Dropout Sweep
+
+Three independent models are trained, one per dropout value, with all other hyperparameters held constant.
+
+| Dropout | Applied to |
+|---|---|
+| 0.3 | Embedding dropout + inter-layer LSTM dropout |
+| 0.5 | Embedding dropout + inter-layer LSTM dropout |
+| 0.7 | Embedding dropout + inter-layer LSTM dropout |
+
+**Training config (per run)**
+
+| Setting | Value |
+|---|---|
+| Epochs | 10 |
+| Batch size | 64 |
+| Optimiser | Adam (lr=5e-4, weight_decay=1e-5) |
+| Gradient clipping | 1.0 |
+| Teacher forcing ratio | 0.5 |
+| Mixed precision (AMP) | Yes (CUDA only) |
+| `torch.compile` | Yes (default mode, if available) |
+
+Each run saves its best checkpoint (lowest validation loss) to `/content/exp4_dropout_<value>.pt`.
+
+---
+
+## Evaluation Metrics
+
+- **SacreBLEU** — corpus-level BLEU computed with the `sacrebleu` library.
+- **METEOR** — average sentence-level METEOR via `nltk.translate.meteor_score`.
+
+Both are computed on up to 200 test pairs using beam search decoding.
+
+---
+
+## Outputs
+
+| File | Contents |
+|---|---|
+| `data/exp4_dropout_summary.csv` | One row per dropout value: BLEU, METEOR, best val loss, timing |
+| `data/exp4_dropout_history.csv` | Per-epoch train/val loss for every run |
+| `/content/exp4_dropout_<value>.pt` | Best model checkpoint for each dropout value |
+
+The notebook also renders six matplotlib plots inline:
+- Train loss vs. epoch (all dropout values overlaid)
+- Validation loss vs. epoch
+- Test BLEU by dropout (bar chart)
+- Test METEOR by dropout (bar chart)
+- Best validation loss by dropout (bar chart)
+- Total training time by dropout (bar chart)
+
+---
+
+## Requirements
+
+```
+torch
+datasets
+sacrebleu
+nltk
+tqdm
+numpy
+pandas
+matplotlib
+```
+
+Install in Colab with:
+
+```bash
+pip -q install datasets nltk sacrebleu tqdm
+```
+
+NLTK resources (`wordnet`, `omw-1.4`) are downloaded automatically at runtime if missing.
+
+---
+
+## How to Run
+
+1. Open the notebook in **Google Colab** (GPU runtime recommended).
+2. Run all cells in order — data loading, preprocessing, model definition, and the dropout sweep are all self-contained.
+3. Results are printed to the console and saved to `data/` automatically.
+
+> **Note:** The sweep respects `max_train_time_sec` (default 3 hours). If the budget is exhausted mid-sweep, completed runs are still saved and exported.
+
+---
 
 ## Project Structure
 
-```text
-mt-thesis-project/
-|-- data/
-|-- models/
-|-- notebooks/
-|-- src/
-|   |-- data_loader.py
-|   |-- preprocessing.py
-|   |-- model.py
-|   |-- train.py
-|   |-- evaluate.py
-|   |-- translate.py
-|-- app/
-|   |-- app.py
-|-- requirements.txt
-|-- README.md
 ```
-
-## Features
-
-- Loads dataset from Hugging Face: rhyliieee/tagalog-filipino-english-translation
-- Preprocessing pipeline:
-  - Lowercasing
-  - Tokenization
-  - Vocabulary building
-  - Sequence padding
-- Seq2Seq model with:
-  - LSTM Encoder
-  - LSTM Decoder
-  - Optional attention mechanism
-- Training and validation loops
-- SacreBLEU evaluation on test split
-- Translation inference mode (no retraining needed)
-- Supports word and sentence translation
-- Simple Streamlit app for text input/output
-
-## Paper / Report (ACL Format)
-
-The LaTeX report is already structured for the official ACL style.
-
-### Option A: Build in Overleaf (recommended)
-
-Upload these files into an Overleaf project:
-
-- `report/english_filipino_translation_report.tex`
-- `report/references.bib`
-- `report/acl.sty`
-- `report/acl_natbib.bst`
-
-Then set the main file to `english_filipino_translation_report.tex`.
-
-To switch between modes:
-- Review (anonymous + line numbers): `\usepackage[review]{acl}`
-- Camera-ready: `\usepackage{acl}` (and replace the author block)
-- Preprint: `\usepackage[preprint]{acl}`
-
-### Option B: Build locally (pdfLaTeX)
-
-From the `report/` folder:
-
-```bash
-pdflatex english_filipino_translation_report.tex
-bibtex english_filipino_translation_report
-pdflatex english_filipino_translation_report.tex
-pdflatex english_filipino_translation_report.tex
+CounterSeagas-Seq2seqDropoutValue.ipynb
+│
+├── Configuration
+├── Preprocessing Utilities      # tokenisation, cleaning, filtering, vocabulary
+├── Dataset Loader Utilities     # HuggingFace loading, split management
+├── Model                        # Encoder, AdditiveAttention, Decoder, Seq2Seq
+├── Training Utilities           # epoch loop, AMP, gradient accumulation, checkpointing
+├── Prepare Data                 # instantiate vocabs and DataLoaders
+├── Inference Utility            # translate_text() with greedy/beam decode
+└── Experiment 4 — Dropout Sweep # main ablation + CSV export + plots
 ```
-
-## Experiment Notes
-
-### Dropout sweep (Experiment 4)
-
-The dropout sweep results (dropout values 0.3/0.5/0.7) are summarized inside the paper/report and were computed using a capped dataset configuration (20k train, 1.5k val) with an evaluation subset of 200 pairs.
-
-If you are tracking raw metrics during runs, store them as CSVs (e.g., training history per epoch and summary tables) and reference them in the report.
-
-## 1. Environment Setup
-
-Open terminal in project root folder:
-
-```bash
-cd mt-thesis-project
-```
-
-Create and activate virtual environment:
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-```
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-## 2. Train the Model
-
-### RTX 3050 (4GB) Recommended Settings
-
-Use this command for better compatibility with low-VRAM GPUs:
-
-```bash
-python src/train.py --src_lang english --tgt_lang filipino --epochs 10 --batch_size 8 --embedding_dim 128 --hidden_dim 256 --use_attention --grad_accum_steps 4 --num_workers 0 --save_path models/seq2seq_en_to_fil_gpu.pt
-```
-
-### Capped Dataset (Faster 10-Epoch Runs)
-
-If you want to reliably finish 10 epochs faster, cap the number of samples:
-
-```bash
-python src/train.py --src_lang english --tgt_lang filipino --epochs 10 --batch_size 8 --embedding_dim 128 --hidden_dim 256 --use_attention --grad_accum_steps 4 --num_workers 0 --max_train_samples 20000 --max_val_samples 2000 --save_path models/seq2seq_en_to_fil_gpu.pt
-```
-
-PowerShell launcher with cap:
-
-```powershell
-./scripts/start_training.ps1 -Epochs 10 -BatchSize 8 -EmbeddingDim 128 -HiddenDim 256 -GradAccumSteps 4 -MaxTrainSamples 20000 -MaxValSamples 2000
-```
-
-Why this works better on 4GB VRAM:
-- Smaller batch size and model dimensions reduce memory usage.
-- Gradient accumulation keeps an effectively larger batch without OOM.
-- Automatic mixed precision (AMP) is enabled by default on CUDA.
-
-### English -> Filipino
-
-```bash
-python src/train.py --src_lang english --tgt_lang filipino --epochs 10 --batch_size 32 --use_attention
-```
-
-### Filipino -> English (Bidirectional support)
-
-```bash
-python src/train.py --src_lang filipino --tgt_lang english --epochs 10 --batch_size 32 --use_attention --save_path models/seq2seq_fil_to_en.pt
-```
-
-Notes:
-- The best validation model is saved to the path in --save_path.
-- Default checkpoint path is models/seq2seq_latest.pt.
-
-## 3. Evaluate with SacreBLEU
-
-```bash
-python src/evaluate.py --checkpoint models/seq2seq_latest.pt --max_samples 300
-```
-
-Output:
-- SacreBLEU score in terminal
-- Sample translations
-- CSV file with predictions: data/evaluation_samples.csv
-
-## 4. Translate Text (CLI)
-
-Single text translation:
-
-```bash
-python src/translate.py --checkpoint models/seq2seq_latest.pt --text "How are you today?"
-```
-
-Interactive mode:
-
-```bash
-python src/translate.py --checkpoint models/seq2seq_latest.pt
-```
-
-Type quit to exit interactive mode.
-
-## 5. Run the Simple App (Streamlit)
-
-```bash
-streamlit run app/app.py
-```
-
-In the app:
-- Enter checkpoint path (default is models/seq2seq_latest.pt)
-- Enter text
-- Click Translate
-
-## Module Guide
-
-- src/data_loader.py
-  - Loads dataset and returns train/validation/test source-target pairs.
-- src/preprocessing.py
-  - Handles normalization, tokenization, vocabulary, numericalization, and padding.
-- src/model.py
-  - Defines Encoder, Decoder, Attention, and Seq2Seq model.
-- src/train.py
-  - Trains model with CrossEntropyLoss and Adam optimizer.
-- src/evaluate.py
-  - Computes SacreBLEU and saves sample translations.
-- src/translate.py
-  - Loads saved model and performs inference.
-- app/app.py
-  - Streamlit UI for translation.
-
-## Suggested Thesis Defense Flow
-
-1. Explain dataset source and train/validation/test splitting.
-2. Explain preprocessing choices and vocabulary handling.
-3. Present Seq2Seq architecture (Encoder-Decoder and optional attention).
-4. Show training/validation loss trends.
-5. Report SacreBLEU score and qualitative examples.
-6. Demo CLI and Streamlit app for word and sentence translation.
-
-## Troubleshooting
-
-- If NLTK tokenizer data is missing, the project auto-downloads punkt.
-- If checkpoint not found, train first or provide correct --checkpoint path.
-- If output quality is low, train for more epochs or increase training data size.
